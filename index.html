@@ -139,6 +139,13 @@
         <button id="deletePalette" class="btn danger" type="button">削除</button>
       </div>
 
+      <div class="row" style="margin-top:10px">
+        <button id="exportJson" class="btn" type="button">JSON書き出し</button>
+        <button id="importJsonBtn" class="btn" type="button">JSON読み込み</button>
+        <input id="importJsonInput" type="file" accept=".json,application/json" hidden>
+        <div class="small">PC↔スマホ間でパレット一式を受け渡せる。</div>
+      </div>
+
       <div id="paletteGrid" class="palette-grid" style="margin-top:12px"></div>
 
       <details>
@@ -152,7 +159,7 @@
       </details>
     </section>
 
-    <div class="footer">Palette Snap PWA v1.0</div>
+    <div class="footer">Palette Snap PWA v1.1</div>
   </main>
 
 <script>
@@ -201,6 +208,102 @@
   function saveState(){
     state.currentId = currentId;
     localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  }
+
+  function safeFileName(name){
+    return String(name || 'palette-snap')
+      .replace(/[\\/:*?"<>|]/g,'_')
+      .replace(/\s+/g,'-')
+      .slice(0,60) || 'palette-snap';
+  }
+
+  function exportJson(){
+    const payload = {
+      format: 'palette-snap',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      currentId,
+      palettes: state.palettes.map(p => ({
+        id: p.id,
+        name: p.name,
+        colors: [...p.colors]
+      }))
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const now = new Date();
+    const stamp = now.getFullYear().toString() +
+      String(now.getMonth()+1).padStart(2,'0') +
+      String(now.getDate()).padStart(2,'0') + '-' +
+      String(now.getHours()).padStart(2,'0') +
+      String(now.getMinutes()).padStart(2,'0');
+    a.href = url;
+    a.download = safeFileName('palette-snap-'+stamp) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 1000);
+    setStatus('JSONを書き出した。');
+  }
+
+  function normalizeImportedData(raw){
+    if(!raw || typeof raw !== 'object') throw new Error('JSONの形式が不正。');
+    let palettes = null;
+    let requestedCurrentId = null;
+    if(Array.isArray(raw.palettes)){
+      palettes = raw.palettes;
+      requestedCurrentId = raw.currentId || null;
+    }else if(Array.isArray(raw.colors)){
+      palettes = [{id: raw.id || makeId(), name: raw.name || '読み込みパレット', colors: raw.colors}];
+    }else{
+      throw new Error('palettes または colors が見つからない。');
+    }
+    const cleaned = [];
+    for(const p of palettes){
+      if(!p || !Array.isArray(p.colors)) continue;
+      const colors = [...new Set(p.colors.map(normalizeHex).filter(Boolean))].slice(0,64);
+      if(!colors.length) continue;
+      cleaned.push({id:String(p.id || makeId()), name:String(p.name || '読み込みパレット').slice(0,80), colors});
+    }
+    if(!cleaned.length) throw new Error('有効な色が1色もない。');
+    const seen = new Set();
+    for(const p of cleaned){
+      if(seen.has(p.id)) p.id = makeId();
+      seen.add(p.id);
+    }
+    const validCurrent = requestedCurrentId && cleaned.some(p => p.id === String(requestedCurrentId))
+      ? String(requestedCurrentId) : cleaned[0].id;
+    return {palettes:cleaned, currentId:validCurrent};
+  }
+
+  async function importJsonFile(file){
+    if(!file) return;
+    if(file.size > 1024*1024){ setStatus('JSONが大きすぎる。1MB以下にしてくれ。'); return; }
+    try{
+      const raw = JSON.parse(await file.text());
+      const incoming = normalizeImportedData(raw);
+      const replace = confirm('読み込んだJSONで現在のパレット一式を置き換える？\n\nOK = 置き換える\nキャンセル = 追加する');
+      if(replace){
+        state = {currentId:incoming.currentId, palettes:incoming.palettes};
+        currentId = incoming.currentId;
+      }else{
+        const existingIds = new Set(state.palettes.map(p=>p.id));
+        const added = incoming.palettes.map(p=>{
+          let id=p.id;
+          if(existingIds.has(id)) id=makeId();
+          existingIds.add(id);
+          return {...p,id};
+        });
+        state.palettes.push(...added);
+        currentId = added[0].id;
+      }
+      saveState();
+      rerenderAll();
+      setStatus(incoming.palettes.length+'個のパレットをJSONから読み込んだ。');
+    }catch(err){
+      setStatus('JSON読み込み失敗: '+(err && err.message ? err.message : '不明なエラー'));
+    }
   }
 
   function currentPalette(){
@@ -376,6 +479,16 @@
     state.palettes=state.palettes.filter(x=>x.id!==p.id);
     currentId=state.palettes[0].id;
     saveState();rerenderAll();
+  });
+
+  $('#exportJson').addEventListener('click',exportJson);
+  $('#importJsonBtn').addEventListener('click',()=>{
+    $('#importJsonInput').value='';
+    $('#importJsonInput').click();
+  });
+  $('#importJsonInput').addEventListener('change',e=>{
+    const file=e.target.files && e.target.files[0];
+    importJsonFile(file);
   });
 
   $('#applyBulk').addEventListener('click',()=>{
