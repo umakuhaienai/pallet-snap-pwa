@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#3b3029">
+  <meta name="color-scheme" content="light dark">
+  <title>Palette Snap</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/icon-192.png">
+  <style>
+    :root{
+      --bg:#f3efe8; --panel:#fffaf4; --card:#ffffff; --text:#2d2926;
+      --muted:#736b64; --border:#d8d0c7; --accent:#7a5f4d; --accent2:#eadfd6;
+      --danger:#9d4949;
+    }
+    @media (prefers-color-scheme:dark){
+      :root{
+        --bg:#1f1b18; --panel:#28221e; --card:#302923; --text:#f5eee8;
+        --muted:#bdb2a8; --border:#4d433c; --accent:#c9a98f; --accent2:#3b3029;
+        --danger:#d98585;
+      }
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    body{min-height:100vh}
+    button,input,textarea,select{font:inherit}
+    button{cursor:pointer}
+    .wrap{width:min(980px,100%);margin:0 auto;padding:16px}
+    .top{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px}
+    h1{font-size:clamp(24px,6vw,36px);margin:0}
+    .sub{color:var(--muted);font-size:14px}
+    .grid{display:grid;grid-template-columns:1fr;gap:14px}
+    @media(min-width:760px){.grid{grid-template-columns:1fr 1fr}}
+    .panel{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:14px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .grow{flex:1;min-width:0}
+    .field{display:flex;flex-direction:column;gap:6px}
+    label{font-size:13px;color:var(--muted)}
+    input[type="text"],select,textarea{
+      width:100%;border:1px solid var(--border);background:var(--card);color:var(--text);
+      border-radius:12px;padding:12px;min-height:46px;outline:none
+    }
+    input[type="text"]:focus,select:focus,textarea:focus,button:focus{outline:2px solid var(--accent);outline-offset:2px}
+    input[type="color"]{width:58px;height:46px;border:1px solid var(--border);border-radius:12px;background:var(--card);padding:4px}
+    .btn{border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:12px;min-height:44px;padding:10px 14px}
+    .btn.primary{background:var(--accent);color:#fff;border-color:transparent}
+    @media(prefers-color-scheme:dark){.btn.primary{color:#1f1b18}}
+    .btn.danger{color:var(--danger)}
+    .section-title{font-weight:700;margin-bottom:10px}
+    .result{width:100%;border:1px solid var(--border);background:var(--card);border-radius:13px;padding:10px;display:flex;align-items:center;gap:10px;text-align:left}
+    .rank{width:26px;text-align:center;font-weight:800}
+    .swatch{width:38px;height:38px;border-radius:10px;border:1px solid rgba(0,0,0,.15);flex:none}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .small{font-size:12px;color:var(--muted)}
+    .results{display:grid;gap:8px}
+    .palette-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+    .palette-item{display:flex;gap:8px;align-items:center;border:1px solid var(--border);border-radius:12px;padding:8px;background:var(--card)}
+    .palette-item input[type=color]{width:44px;height:42px}
+    .palette-item input[type=text]{padding:8px;min-height:42px}
+    .palette-item button{width:40px;min-height:40px}
+    canvas{display:block;width:100%;height:auto;border-radius:12px;touch-action:manipulation}
+    .imagebox{display:none;margin-top:10px}
+    .imagebox.show{display:block}
+    .status{min-height:20px;font-size:13px;color:var(--muted);margin-top:8px}
+    .base-chip{display:flex;gap:8px;align-items:center;border:1px solid var(--border);border-radius:12px;padding:8px 10px;background:var(--card)}
+    .base-dot{width:26px;height:26px;border-radius:8px;border:1px solid rgba(0,0,0,.15)}
+    details{border:1px solid var(--border);border-radius:12px;background:var(--card);padding:10px;margin-top:12px}
+    summary{cursor:pointer;font-weight:600}
+    .footer{padding:16px 0 30px;text-align:center;color:var(--muted);font-size:12px}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="top">
+      <div>
+        <h1>🎨 Palette Snap</h1>
+        <div class="sub">拾った色を、自分のパレット内の近い色へスナップ。</div>
+      </div>
+      <button id="installBtn" class="btn primary" hidden>アプリをインストール</button>
+    </div>
+
+    <div class="grid">
+      <section class="panel">
+        <div class="section-title">基準色</div>
+        <div class="row">
+          <div class="field">
+            <label for="baseColor">色</label>
+            <input id="baseColor" type="color" value="#8a735a">
+          </div>
+          <div class="field grow">
+            <label for="baseHex">HEX</label>
+            <input id="baseHex" class="mono" type="text" value="#8A735A" maxlength="7">
+          </div>
+          <button id="copyBase" class="btn" type="button">コピー</button>
+        </div>
+        <div id="status" class="status" aria-live="polite"></div>
+
+        <div style="height:10px"></div>
+        <div class="section-title">画像から拾う</div>
+        <input id="imageInput" type="file" accept="image/*" class="btn" style="width:100%">
+        <div id="imageBox" class="imagebox">
+          <canvas id="canvas"></canvas>
+          <div class="small" style="margin-top:6px">画像をタップ / クリックすると、その地点の色を取得。</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="row" style="justify-content:space-between">
+          <div>
+            <div class="section-title" style="margin:0">近似色</div>
+            <div class="small">Lab色空間 / ΔE76。小さいほど近い。</div>
+          </div>
+          <div class="base-chip">
+            <span id="baseDot" class="base-dot"></span>
+            <span id="baseText" class="mono">#8A735A</span>
+          </div>
+        </div>
+        <div id="results" class="results" style="margin-top:10px"></div>
+      </section>
+    </div>
+
+    <section class="panel" style="margin-top:14px">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <div class="section-title" style="margin:0">パレット</div>
+          <div class="small">端末に保存される。名前を付けて複数持てる。</div>
+        </div>
+        <button id="addColor" class="btn primary" type="button">＋ 色を追加</button>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <div class="field grow">
+          <label for="paletteSelect">保存パレット</label>
+          <select id="paletteSelect"></select>
+        </div>
+        <button id="newPalette" class="btn" type="button">新規</button>
+        <button id="renamePalette" class="btn" type="button">名前変更</button>
+        <button id="deletePalette" class="btn danger" type="button">削除</button>
+      </div>
+
+      <div id="paletteGrid" class="palette-grid" style="margin-top:12px"></div>
+
+      <details>
+        <summary>まとめて編集</summary>
+        <textarea id="bulk" rows="6" class="mono" style="margin-top:10px"></textarea>
+        <div class="row" style="margin-top:8px">
+          <button id="applyBulk" class="btn" type="button">反映</button>
+          <button id="resetPalette" class="btn" type="button">初期色へ戻す</button>
+        </div>
+        <div class="small" style="margin-top:6px">1行1色、または空白・カンマ区切り。例: #302A25 #57483D #806B59</div>
+      </details>
+    </section>
+
+    <div class="footer">Palette Snap PWA v1.0</div>
+  </main>
+
+<script>
+(() => {
+  const DEFAULT = ['#302A25','#57483D','#806B59','#A58B6A','#D2B98E','#6B5949','#93806C','#C3A77E','#4B493F','#74705F','#A09A80','#DED0AD'];
+  const STORE_KEY = 'palette-snap-v1';
+  const $ = s => document.querySelector(s);
+
+  let state = loadState();
+  let currentId = state.currentId;
+  let base = '#8A735A';
+  let deferredPrompt = null;
+
+  const baseColor = $('#baseColor');
+  const baseHex = $('#baseHex');
+  const baseDot = $('#baseDot');
+  const baseText = $('#baseText');
+  const status = $('#status');
+  const results = $('#results');
+  const paletteGrid = $('#paletteGrid');
+  const bulk = $('#bulk');
+  const paletteSelect = $('#paletteSelect');
+  const canvas = $('#canvas');
+  const ctx = canvas.getContext('2d', {willReadFrequently:true});
+
+  function normalizeHex(v){
+    v = String(v||'').trim().toUpperCase();
+    if(!v.startsWith('#')) v = '#'+v;
+    if(/^#[0-9A-F]{3}$/.test(v)) v = '#'+v.slice(1).split('').map(c=>c+c).join('');
+    return /^#[0-9A-F]{6}$/.test(v) ? v : null;
+  }
+
+  function makeId(){
+    return 'p-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);
+  }
+
+  function loadState(){
+    try{
+      const x = JSON.parse(localStorage.getItem(STORE_KEY));
+      if(x && Array.isArray(x.palettes) && x.palettes.length) return x;
+    }catch(e){}
+    const id = makeId();
+    return {currentId:id,palettes:[{id,name:'古い絵本',colors:[...DEFAULT]}]};
+  }
+
+  function saveState(){
+    state.currentId = currentId;
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  }
+
+  function currentPalette(){
+    return state.palettes.find(p=>p.id===currentId) || state.palettes[0];
+  }
+
+  function hexToRgb(hex){
+    const h = normalizeHex(hex);
+    if(!h) return null;
+    return {r:parseInt(h.slice(1,3),16),g:parseInt(h.slice(3,5),16),b:parseInt(h.slice(5,7),16)};
+  }
+
+  function rgbToLab(rgb){
+    let r=rgb.r/255,g=rgb.g/255,b=rgb.b/255;
+    const f=c=>c>0.04045?Math.pow((c+0.055)/1.055,2.4):c/12.92;
+    r=f(r);g=f(g);b=f(b);
+    let x=(r*.4124+g*.3576+b*.1805)/.95047;
+    let y=(r*.2126+g*.7152+b*.0722);
+    let z=(r*.0193+g*.1192+b*.9505)/1.08883;
+    const q=c=>c>.008856?Math.cbrt(c):(7.787*c)+16/116;
+    x=q(x);y=q(y);z=q(z);
+    return {L:116*y-16,a:500*(x-y),b:200*(y-z)};
+  }
+
+  function deltaE(a,b){
+    const dl=a.L-b.L, da=a.a-b.a, db=a.b-b.b;
+    return Math.sqrt(dl*dl+da*da+db*db);
+  }
+
+  function setStatus(t){ status.textContent=t||''; }
+
+  async function copyText(text){
+    try{
+      await navigator.clipboard.writeText(text);
+      setStatus(text+' をコピーした。');
+    }catch(e){
+      const ta=document.createElement('textarea');
+      ta.value=text; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove();
+      setStatus(text+' をコピーした。');
+    }
+  }
+
+  function setBase(hex,note=''){
+    const n=normalizeHex(hex);
+    if(!n){setStatus('HEXは #RRGGBB 形式で。');return}
+    base=n;
+    baseColor.value=n.toLowerCase();
+    baseHex.value=n;
+    baseDot.style.background=n;
+    baseText.textContent=n;
+    setStatus(note);
+    renderResults();
+  }
+
+  function renderResults(){
+    const p=currentPalette();
+    if(!p) return;
+    const bLab=rgbToLab(hexToRgb(base));
+    const ranked=p.colors
+      .map(hex=>({hex,d:deltaE(bLab,rgbToLab(hexToRgb(hex)))}))
+      .sort((a,b)=>a.d-b.d)
+      .slice(0,5);
+
+    results.innerHTML='';
+    ranked.forEach((item,i)=>{
+      const btn=document.createElement('button');
+      btn.type='button';
+      btn.className='result';
+      btn.innerHTML =
+        '<span class="rank">'+(i+1)+'</span>'+
+        '<span class="swatch" style="background:'+item.hex+'"></span>'+
+        '<span class="grow"><b class="mono">'+item.hex+'</b><br><span class="small">ΔE '+item.d.toFixed(2)+'</span></span>'+
+        '<span class="small">コピー</span>';
+      btn.addEventListener('click',()=>copyText(item.hex));
+      results.appendChild(btn);
+    });
+  }
+
+  function renderPaletteSelect(){
+    paletteSelect.innerHTML='';
+    state.palettes.forEach(p=>{
+      const o=document.createElement('option');
+      o.value=p.id;o.textContent=p.name;
+      if(p.id===currentId)o.selected=true;
+      paletteSelect.appendChild(o);
+    });
+  }
+
+  function syncBulk(){ bulk.value=currentPalette().colors.join('\n'); }
+
+  function renderPalette(){
+    const p=currentPalette();
+    paletteGrid.innerHTML='';
+    p.colors.forEach((hex,index)=>{
+      const item=document.createElement('div');
+      item.className='palette-item';
+
+      const color=document.createElement('input');
+      color.type='color';color.value=hex.toLowerCase();
+
+      const text=document.createElement('input');
+      text.type='text';text.value=hex;text.maxLength=7;text.className='mono';
+
+      const del=document.createElement('button');
+      del.type='button';del.className='btn danger';del.textContent='×';
+
+      color.addEventListener('input',()=>{
+        p.colors[index]=color.value.toUpperCase();
+        text.value=p.colors[index];
+        saveState();syncBulk();renderResults();
+      });
+
+      text.addEventListener('change',()=>{
+        const n=normalizeHex(text.value);
+        if(!n){text.value=p.colors[index];return}
+        p.colors[index]=n;color.value=n.toLowerCase();
+        saveState();syncBulk();renderResults();
+      });
+
+      del.addEventListener('click',()=>{
+        p.colors.splice(index,1);
+        saveState();renderPalette();syncBulk();renderResults();
+      });
+
+      item.append(color,text,del);
+      paletteGrid.appendChild(item);
+    });
+  }
+
+  function rerenderAll(){
+    renderPaletteSelect();
+    renderPalette();
+    syncBulk();
+    renderResults();
+  }
+
+  baseColor.addEventListener('input',()=>setBase(baseColor.value));
+  baseHex.addEventListener('change',()=>setBase(baseHex.value));
+  baseHex.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();setBase(baseHex.value)}});
+
+  $('#copyBase').addEventListener('click',()=>copyText(base));
+
+  $('#addColor').addEventListener('click',()=>{
+    const p=currentPalette();
+    if(p.colors.length>=64){setStatus('1パレット64色まで。');return}
+    p.colors.push(base);saveState();renderPalette();syncBulk();renderResults();
+  });
+
+  paletteSelect.addEventListener('change',()=>{
+    currentId=paletteSelect.value;saveState();rerenderAll();
+  });
+
+  $('#newPalette').addEventListener('click',()=>{
+    const name=(prompt('新しいパレット名','新しいパレット')||'').trim();
+    if(!name)return;
+    const id=makeId();
+    state.palettes.push({id,name,colors:[...DEFAULT]});
+    currentId=id;saveState();rerenderAll();
+  });
+
+  $('#renamePalette').addEventListener('click',()=>{
+    const p=currentPalette();
+    const name=(prompt('パレット名',p.name)||'').trim();
+    if(!name)return;
+    p.name=name;saveState();renderPaletteSelect();
+  });
+
+  $('#deletePalette').addEventListener('click',()=>{
+    if(state.palettes.length<=1){setStatus('最後の1個は削除できない。');return}
+    const p=currentPalette();
+    if(!confirm('「'+p.name+'」を削除する？'))return;
+    state.palettes=state.palettes.filter(x=>x.id!==p.id);
+    currentId=state.palettes[0].id;
+    saveState();rerenderAll();
+  });
+
+  $('#applyBulk').addEventListener('click',()=>{
+    const found=bulk.value.split(/[\s,;]+/).map(normalizeHex).filter(Boolean);
+    const unique=[...new Set(found)].slice(0,64);
+    if(!unique.length){setStatus('有効なHEXが見つからない。');return}
+    currentPalette().colors=unique;
+    saveState();renderPalette();syncBulk();renderResults();
+    setStatus(unique.length+'色を反映した。');
+  });
+
+  $('#resetPalette').addEventListener('click',()=>{
+    currentPalette().colors=[...DEFAULT];
+    saveState();renderPalette();syncBulk();renderResults();
+    setStatus('初期パレットへ戻した。');
+  });
+
+  $('#imageInput').addEventListener('change',e=>{
+    const file=e.target.files&&e.target.files[0];
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        const maxW=1400;
+        const scale=Math.min(1,maxW/img.width);
+        canvas.width=Math.max(1,Math.round(img.width*scale));
+        canvas.height=Math.max(1,Math.round(img.height*scale));
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        $('#imageBox').classList.add('show');
+        setStatus('画像をタップすると色を拾える。');
+      };
+      img.onerror=()=>setStatus('画像を読み込めなかった。');
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  canvas.addEventListener('pointerdown',e=>{
+    const rect=canvas.getBoundingClientRect();
+    if(!rect.width||!rect.height)return;
+    const x=Math.max(0,Math.min(canvas.width-1,Math.floor((e.clientX-rect.left)*canvas.width/rect.width)));
+    const y=Math.max(0,Math.min(canvas.height-1,Math.floor((e.clientY-rect.top)*canvas.height/rect.height)));
+    const px=ctx.getImageData(x,y,1,1).data;
+    const h='#'+[px[0],px[1],px[2]].map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase();
+    setBase(h,'画像から '+h+' を取得した。');
+  });
+
+  window.addEventListener('beforeinstallprompt',e=>{
+    e.preventDefault();
+    deferredPrompt=e;
+    $('#installBtn').hidden=false;
+  });
+
+  $('#installBtn').addEventListener('click',async()=>{
+    if(!deferredPrompt)return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt=null;
+    $('#installBtn').hidden=true;
+  });
+
+  window.addEventListener('appinstalled',()=>{
+    setStatus('Palette Snap をインストールした。');
+    $('#installBtn').hidden=true;
+  });
+
+  if('serviceWorker' in navigator){
+    window.addEventListener('load',()=>{
+      navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
+    });
+  }
+
+  setBase(base);
+  rerenderAll();
+})();
+</script>
+</body>
+</html>
