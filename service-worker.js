@@ -1,4 +1,4 @@
-const CACHE = 'palette-snap-v2';
+const CACHE = 'palette-snap-v3';
 const ASSETS = [
   './',
   './index.html',

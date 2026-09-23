@@ -92,7 +92,7 @@
             <label for="baseHex">HEX</label>
             <input id="baseHex" class="mono" type="text" value="#8A735A" maxlength="7">
           </div>
-          <button id="copyBase" class="btn" type="button">コピー</button>
+          <button id="copyBase" class="btn" type="button">#なしでコピー</button>
         </div>
         <div id="status" class="status" aria-live="polite"></div>
 
@@ -159,7 +159,7 @@
       </details>
     </section>
 
-    <div class="footer">Palette Snap PWA v1.1</div>
+    <div class="footer">Palette Snap PWA v1.2</div>
   </main>
 
 <script>
@@ -377,8 +377,8 @@
         '<span class="rank">'+(i+1)+'</span>'+
         '<span class="swatch" style="background:'+item.hex+'"></span>'+
         '<span class="grow"><b class="mono">'+item.hex+'</b><br><span class="small">ΔE '+item.d.toFixed(2)+'</span></span>'+
-        '<span class="small">コピー</span>';
-      btn.addEventListener('click',()=>copyText(item.hex));
+        '<span class="small">#なしでコピー</span>';
+      btn.addEventListener('click',()=>copyText(item.hex.replace(/^#/,'')));
       results.appendChild(btn);
     });
   }
@@ -445,7 +445,7 @@
   baseHex.addEventListener('change',()=>setBase(baseHex.value));
   baseHex.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();setBase(baseHex.value)}});
 
-  $('#copyBase').addEventListener('click',()=>copyText(base));
+  $('#copyBase').addEventListener('click',()=>copyText(base.replace(/^#/,'')));
 
   $('#addColor').addEventListener('click',()=>{
     const p=currentPalette();
